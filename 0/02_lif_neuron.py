@@ -10,7 +10,7 @@
 U_th = 1 是阈值。beta 越大，膜电位"记得"越久（时间常数越长）。
 
 运行：
-    cd D:\\lg\\else\\ai_learning\\snn
+    cd D:\\lg\\else\\ai_learning\\snn\\0
     & "C:\\Users\\moon side\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe" 02_lif_neuron.py
 
 **注意**：这个文件是练习，没填完 `TODO` 之前跑它会直接抛

@@ -35,7 +35,7 @@
     被标准代理梯度法忽略（EventProp 那类"精确梯度"工作就是来补这一项的）。
 
 运行：
-    cd D:\\lg\\else\\ai_learning\\snn
+    cd D:\\lg\\else\\ai_learning\\snn\\0
     & "C:\\Users\\moon side\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe" 03_snn_train.py
     & ... 03_snn_train.py --n 10000 --epochs 12 --T 20     # 快速跑
     & ... 03_snn_train.py --model ann                     # 对照组：同样的层，去掉脉冲
@@ -47,12 +47,16 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
 import numpy as np
 
-from data_loader import load_mnist, one_hot
+# 让脚本无论从哪里被调用，都能 import 到同目录的 data_loader
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from data_loader import load_mnist, one_hot  # noqa: E402
 
 U_TH = 1.0
 K_SURROGATE = 10.0

@@ -3,7 +3,7 @@
 自己写完 02/03 之后再对照，不要一上来就看。
 
 运行：
-    cd D:\\lg\\else\\ai_learning\\snn
+    cd D:\\lg\\else\\ai_learning\\snn\\0
     & "C:\\Users\\moon side\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe" reference_solution.py
     & ... reference_solution.py --n 10000 --epochs 12 --T 20
 """

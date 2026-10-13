@@ -9,7 +9,7 @@
 于是：像素越亮 → 发得越频繁；T 越大 → 估计越准（噪声 ~ 1/sqrt(T)）。
 
 运行：
-    cd D:\\lg\\else\\ai_learning\\snn
+    cd D:\\lg\\else\\ai_learning\\snn\\0
     & "C:\\Users\\moon side\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe" 01_encoding.py
 
 **注意**：这个文件是练习，`TODO` 没填之前跑它会抛 `NotImplementedError` —— 这是**预期的**。
@@ -18,12 +18,14 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import numpy as np
 
-from data_loader import load_mnist
+# 让脚本无论从哪里被调用，都能 import 到同目录的 data_loader
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+from data_loader import load_mnist  # noqa: E402
 
 
 def rate_encode(x: np.ndarray, T: int, rng: np.random.Generator) -> np.ndarray:

@@ -9,7 +9,7 @@
      `reference_solution.py` 里的 `simulate`，所以文档里的数字和这里必然一致
 
 运行：
-    cd D:\\lg\\else\\ai_learning\\snn
+    cd D:\\lg\\else\\ai_learning\\snn\\0
     & "C:\\Users\\moon side\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe" verify_setup.py
 
 期望（全部对得上 = 环境没问题）：
@@ -77,8 +77,8 @@ def main() -> None:
         _, s = ref.simulate(i, 0.9)
         print(f"    I={I:<5} r={float(s.sum()) / 200 * 1000:7.1f} Hz")
 
-    print("\n[5] 代理梯度（fast sigmoid）")
-    for d in (-2.0, -0.5, 0.0, 0.5, 2.0):
+    print("\n[5] 代理梯度（fast sigmoid，k=10）")
+    for d in (-2.0, -0.5, -0.2, 0.0, 0.2, 0.5, 2.0):
         g = float(ref.surrogate_deriv(np.array([d], dtype=np.float32))[0])
         print(f"    surrogate'({d:+.1f}) = {g:.6f}")
     print("    → d=0 时最大(=1)，越远离阈值越小：这就是'脉冲的假导数'")
