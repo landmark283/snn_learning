@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import numpy as np
 
 K = 10.0        # 替代函数的陡度（本项目用 10）
