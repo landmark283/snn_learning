@@ -23,16 +23,21 @@
             U[t] = beta * U[t-1] + I[t] - S[t-1] * U_th
             S[t] = (U[t] >= U_th)
 
-    反向（记 g = dL/dU[t]）：
-            dS[t]     = (g_in[t] + g) * surrogate'(U[t] - U_th)
-            dW       += dS[t].T @ S_in[t]
-            db       += dS[t].sum(0)
-            dS_in[t] += dS[t] @ W
-            g_{t-1}   = (g_in[t] + g) * beta  -  dS[t] * U_th   ← 这一项是"重置"的贡献
+    反向（记 A[t] = dL/dU[t]）：
+            A[t]     = g_in[t] + A[t+1] * ( beta - U_th * surrogate'(U[t] - U_th) )
+            dW      += A[t].T @ S_in[t]
+            db      += A[t].sum(0)
+            dS_in[t] = A[t] @ W                        ← 这是 dL/dS_in，不是 dL/dU
 
-    关键：LIF 是有状态的，反向不能只算 dS，必须一路把 g 沿时间轴传回去。
-    这正是"时序反向传播 (BPTT)"。严格来说 S[t-1] 也依赖 U[t-1]，那一项
-    被标准代理梯度法忽略（EventProp 那类"精确梯度"工作就是来补这一项的）。
+    参数梯度要的因子是 A[t] = dL/dU[t] 本身，**不是** A[t]*surrogate'——
+    后者是 dL/dS 的量级，会让梯度差一个数量级（check_bptt.py 有实测）。
+
+    每一层的入口 g_in[t] 也必须是 dL/dU[t]。输出层由读出头给出（读的就是 U2）；
+    隐藏层拿到的是上一层吐出的 dL/dS1[t]，**要先乘 surrogate'(U1-U_th)** 才是入口。
+
+    关键：LIF 是有状态的，反向必须一路把 A 沿时间轴传回去，这就是"时序反向传播 (BPTT)"。
+    (beta - U_th*surrogate') 里的第二项就是"重置"的贡献，最容易漏。
+    surrogate' 该取哪一拍的膜电位，是标准做法唯一的近似之处（见 02 §4.2.3）。
 
 运行：
     cd D:\\lg\\else\\ai_learning\\snn\\0
@@ -114,29 +119,35 @@ class LIFLayer:
 
     def backward(self, g_in: np.ndarray, cache) -> np.ndarray:
         """
-        g_in: dL/dU[t] 的形状 (T, B, n_out)，来自"上层的反向"+"本层输出的损失"。
-        返回: dL/dS_in (T, B, n_in)，交给下一层继续往回传。
+        g_in: dL/dU[t] 的形状 (T, B, n_out)。**入口一律是 ∂L/∂U**——
+              上一层吐出来的是 ∂L/∂S，调用方要先乘 σ' 才是这里要的东西。
+        返回: dL/dS_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)。
+              下一层要用它，同样得先乘它自己的 σ'。
+
+        严格式（`check_bptt.py` 用中心差分验证过，机器精度）：
+            A[t] = g_in[t] + A[t+1] * (beta - U_th * surrogate'(U[t] - U_th))
+            gW += A[t].T @ s_in[t]        gb += A[t].sum(0)
+        权重梯度的因子是 A[t] = ∂L/∂U[t]，**不是** A[t]*σ'。
         """
         s_in, u_out = cache
         T, B, _ = g_in.shape
         dS_in = np.zeros_like(s_in)
         self.gW[...] = 0.0
         self.gb[...] = 0.0
-        g = np.zeros((B, self.n_out), dtype=np.float32)  # 从 t=T-1 往 t=0 传
+        a_next = np.zeros((B, self.n_out), dtype=np.float32)  # A[t+1]，从 t=T-1 往 t=0 传
         for t in reversed(range(T)):
-            # TODO 4: 把"来自上层"的 g_in[t] 加上沿时间累积过来的 g，得到这一步的 dL/dU[t]
-            g_t = None
-            # TODO 5: dS = g_t * surrogate'(u - U_th)
-            dS = None
-            # TODO 6: 参数梯度
-            self.gW += None  # dS.T @ s_in[t]
-            self.gb += None  # dS.sum(0)
-            # TODO 7: 往输入传
-            dS_in[t] = None  # dS @ W
-            # TODO 8: 往上一时间步传：
-            #         U[t] 依赖 U[t-1]（系数 beta）和 S[t-1]（系数 -U_th，重置项）
-            #         严格说 S[t-1] 也依赖 U[t-1]，那一项被标准代理梯度法忽略
-            g = None
+            # TODO 4: 本拍的 A[t] = ∂L/∂U[t]。两路相加：
+            #         ① 外面进来的 g_in[t]
+            #         ② 上一拍传回来的 a_next（它已经含了 ∂U[t]/∂U[t-1] 的系数）
+            a_t = None
+            # TODO 5: 参数梯度。注意因子是 a_t 本身，**不要再乘 σ'**
+            self.gW += None  # a_t.T @ s_in[t]
+            self.gb += None  # a_t.sum(0)
+            # TODO 6: 往输入传。这是 ∂L/∂S_in，不是 ∂L/∂U（下一层要自己乘 σ'）
+            dS_in[t] = None  # a_t @ W
+            # TODO 7: 更新滚动变量，留给下一轮（t-1）。要算的是 ∂U[t]/∂U[t-1]：
+            #         泄漏一项、重置一项（重置项里带了替代导数）
+            a_next = None
         return dS_in
 
     def step(self, lr: float):
@@ -193,13 +204,16 @@ class SNN2:
         loss = -np.log(np.clip((p * y_onehot).sum(axis=1), 1e-9, None)).mean()
 
         dl_dlogits = (p - y_onehot) / B                  # (B, C)
-        # TODO 9: logits = mean_t(latents) → 每个时间步都分到 1/T
+        # TODO 8: logits = mean_t(latents) → 每个时间步都分到 1/T
         dl_dlatent = None
         dl_du2 = dl_dlatent * mask
 
         # 一路回传：输出层 → 隐藏层
         dl_ds1 = self.l2.backward(dl_du2, c2)
-        self.l1.backward(dl_ds1, c1)
+        # TODO 9: l2 吐出来的是 ∂L/∂S1（脉冲那一侧），而 l1 要的入口是 ∂L/∂U1，
+        #         两者差一个 σ'(U1 - U_th)。漏掉它，隐藏层的梯度会偏一个数量级。
+        dl_du1 = None
+        self.l1.backward(dl_du1, c1)
         return loss
 
     def adam_step(self, lr: float, b1: float = 0.9, b2: float = 0.999, eps: float = 1e-8):

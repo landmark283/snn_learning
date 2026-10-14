@@ -103,21 +103,29 @@ class LIFLayer:
     def backward(self, g_in, cache):
         """
         g_in: dL/dU[t]，形状 (T, B, n_out)。
-        返回 dL/dS_in (T, B, n_in)。
+              **入口一律是 ∂L/∂U**——如果上一层给的是 ∂L/∂S，调用方要自己乘 σ'。见 loss_and_grad。
+        返回 dL/dS_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)；
+        下一层要用它，得先乘它自己的 σ' 才是它要的 ∂L/∂U。
+
+        严格式（`check_bptt.py` 用中心差分验证过，机器精度）：
+            A[t] = g_in[t] + A[t+1] · ( β − U_th · σ'(U[t] − U_th) )
+            gW  += A[t].T @ S_in[t]      gb += A[t].sum(0)
+        注意权重梯度用的是 A[t] = ∂L/∂U[t]，**不是** A[t]·σ'(U[t]-U_th)——
+        后者是 ∂L/∂S 的量级，会让梯度差一个数量级。
         """
         s_in, u_out = cache
         T, B, _ = g_in.shape
         dS_in = np.zeros_like(s_in)
         self.gW[...] = 0.0
         self.gb[...] = 0.0
-        g = np.zeros((B, self.n_out), dtype=np.float32)
+        a_next = np.zeros((B, self.n_out), dtype=np.float32)
         for t in reversed(range(T)):
-            g_t = g + g_in[t]
-            dS = g_t * surrogate_deriv(u_out[t] - U_TH)
-            self.gW += dS.T @ s_in[t]
-            self.gb += dS.sum(axis=0)
-            dS_in[t] = dS @ self.W
-            g = g_t * self.beta - dS * U_TH
+            sd = surrogate_deriv(u_out[t] - U_TH)
+            a_t = g_in[t] + a_next * (self.beta - U_TH * sd)
+            self.gW += a_t.T @ s_in[t]
+            self.gb += a_t.sum(axis=0)
+            dS_in[t] = a_t @ self.W
+            a_next = a_t
         return dS_in
 
 
@@ -172,8 +180,14 @@ class SNN2:
         dl_dlatent = np.broadcast_to(dl_dlogits[None] / T, latents.shape).copy()
         dl_du2 = dl_dlatent * mask
 
+        # 输出层的入口：读出头直接给出 ∂L/∂U2[t]
         dl_ds1 = self.l2.backward(dl_du2, c2)
-        self.l1.backward(dl_ds1, c1)
+        # 隐藏层的入口必须是 ∂L/∂U1[t]，而 l2 吐出来的是 ∂L/∂S1[t]（这才是它消费的东西）。
+        # 两者的关系就是 S1 = σ(U1-U_th)：∂L/∂U1 = ∂L/∂S1 · σ'(U1-U_th)。
+        # 这一步漏掉的话，隐藏层会把 σ' 当成 1，梯度偏离一个数量级。
+        s0_in, u1_out = c1
+        dl_du1 = dl_ds1 * surrogate_deriv(u1_out - U_TH)
+        self.l1.backward(dl_du1, c1)
         return loss
 
     def adam_step(self, lr, b1=0.9, b2=0.999, eps=1e-8):
