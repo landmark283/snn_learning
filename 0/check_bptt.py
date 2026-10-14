@@ -78,6 +78,8 @@ def loss_from(t0, u_pert, s_in, W, G):
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):      # Windows 控制台默认 GBK
+        sys.stdout.reconfigure(encoding="utf-8")
     check_surrogate()
 
     rng = np.random.default_rng(3)
@@ -136,7 +138,7 @@ def main() -> None:
         print(f"    {t:>3} {sc:>12.6f} {np.abs(A[t]).max():>12.6f} "
               f"{np.abs(approx[t]).max():>12.6f} {e_strict:>10.2e} {e_approx:>10.2%}")
     print()
-    print("    ⚠️ 关于 [2]：本脚本用来当'真值'的中心差分**不可靠**——")
+    print("    [注意] 关于 [2]：本脚本用来当'真值'的中心差分**不可靠**——")
     print("       对 U[t] 施加扰动时 S[t] = σ(U[t]-U_th) 也会变，这条路径没被一致地算进去。")
     print("       所以 [2] 那一列只能看'量级和形状'，不能当精确判据。")
     print("       想要的精确判据，请改用 PyTorch autograd（见文档 §4.2 (0) 的说明）。")
