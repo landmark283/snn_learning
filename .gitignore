@@ -3,3 +3,6 @@ outputs
 .skill
 # 我自己的实现
 my
+# 临时的 commit message / 脚本（别提交进来）
+_cmsg.tmp
+*.tmp

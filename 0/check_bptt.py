@@ -297,7 +297,7 @@ def main():
     check_one_layer()
     check_two_layer()
     ok &= check_reference()
-    print("[OK] 全部通过：§3.3 替代函数自洽；§4.2 的递推与入口都以 ∂L/∂U[t] 为准，"
+    print("[OK] 全部通过：§3.3 替代函数自洽；§4.2 的递推用全导 dL/dU[t]、入口用偏导 ∂L/∂U[t]，"
           "且参考解已对齐。" if ok else "[!!] 有检查未通过")
 
 
