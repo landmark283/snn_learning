@@ -138,15 +138,16 @@ class LIFLayer:
         for t in reversed(range(T)):
             # TODO 4: 本拍的 A[t] = ∂L/∂U[t]。两路相加：
             #         ① 外面进来的 g_in[t]
-            #         ② 上一拍传回来的 a_next（它已经含了 ∂U[t]/∂U[t-1] 的系数）
+            #         ② A[t+1]（就是 a_next）乘上系数 (β − U_th·σ'(U[t] - U_th))
+            #         系数用**本拍**的 U[t]（它代表 ∂U[t+1]/∂U[t]），写成 U[t+1] 就错了一拍
             a_t = None
             # TODO 5: 参数梯度。注意因子是 a_t 本身，**不要再乘 σ'**
             self.gW += None  # a_t.T @ s_in[t]
             self.gb += None  # a_t.sum(0)
             # TODO 6: 往输入传。这是 ∂L/∂S_in，不是 ∂L/∂U（下一层要自己乘 σ'）
             dS_in[t] = None  # a_t @ W
-            # TODO 7: 更新滚动变量，留给下一轮（t-1）。要算的是 ∂U[t]/∂U[t-1]：
-            #         泄漏一项、重置一项（重置项里带了替代导数）
+            # TODO 7: 滚动变量。本拍的 a_t 要**原样**留给下一轮（t-1）当 A[t+1] 用；
+            #         系数是下一轮才乘的，这里不要再乘 σ'
             a_next = None
         return dS_in
 

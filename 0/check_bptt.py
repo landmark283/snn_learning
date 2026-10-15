@@ -8,7 +8,10 @@
 
   [2] 权重梯度该用哪个因子、重置项的 σ' 该用哪个下标？
 
-  [3] 两层网络端到端：`reference_solution.py` 的 backward 写法和严格式差多少？
+  [3] 两层网络端到端：旧版 `reference_solution.py` 的 backward 写法差多少？
+      （现状文件已改成严格式，[4] 专门核对它）
+
+  [4] 现在的 `reference_solution.py` 的 backward 是否等于严格式？
 
 [2][3] 的判据都是**在"光滑替代前向"上对 W 做中心差分**（把 S 当成 σ(U-U_th)，
 于是整网处处可导）。对 W 差分是可靠的——它不会像"对 U[t] 差分"那样漏掉
@@ -111,11 +114,11 @@ class OneLayer:
                 # 只把 σ' 的下标写成 t+1（因子用对的 A[t]）
                 A[t] = self.g_in[t] + A[t + 1] * (BETA - U_TH * sd[t + 1])
             elif variant == "doc":
-                # 文档 §4.2.2 ④ 原来写的：(2b) + dS[t+1]·(-U_th)·σ'(U[t]-U_th)
+                # 旧文档 §4.2.2 ④ 原来写的：(2b) + dS[t+1]·(-U_th)·σ'(U[t]-U_th)
                 A[t] = self.g_in[t] + A[t + 1] * BETA + dS[t + 1] * (-U_TH) * sd[t]
                 dS[t] = A[t] * sd[t]
             elif variant == "code":
-                # reference_solution.py 的写法
+                # 旧版 reference_solution.py 的写法（已修，保留用于量化偏差）
                 A[t] = self.g_in[t] + A[t + 1] * BETA - dS[t + 1] * U_TH
                 dS[t] = A[t] * sd[t]
             else:
@@ -137,12 +140,13 @@ def check_one_layer():
         print(f"   {'写法':<30} {'dW 相对误差':>12}")
         for variant, label in (("strict", "严格式：因子 A[t]，σ' 用 t"),
                                ("offbyone", "因子 A[t]，σ' 下标写成 t+1"),
-                               ("doc", "文档 ④ 原式 + 因子 A[t]·σ'[t]"),
-                               ("code", "reference_solution.py 现状")):
+                               ("doc", "旧文档 ④ 的原式 + 因子 A[t]·σ'[t]"),
+                               ("code", "旧版参考解：因子 A[t]·σ'[t]（已修）")):
             err = np.abs(net.bptt(variant) - trueW).max() / scale
             print(f"   {label:<30} {err:>12.2e}")
     print("\n   -> 只有「严格式」是机器精度。后两种都用 `A[t]·σ'[t]` 当权重梯度的因子，"
-          "那已经是 ∂L/∂S 的量级；\n      σ' 在阈值处为 1、稍远就掉到 1% 量级，所以误差是整个量级的。\n")
+          "那已经是 ∂L/∂S 的量级；\n      σ' 在阈值处为 1、稍远就掉到 1% 量级，所以误差是整个量级的。"
+          "\n      现在的 reference_solution.py 用的就是「严格式」。\n")
 
 
 # ==========================================================================
@@ -192,8 +196,8 @@ class TwoLayer:
 
     def bptt(self, variant):
         """variant='strict'：g_in 统一是 dL/dU[t]；上一层传下来的 dL/dS 要乘 σ' 才是 dL/dU。
-        variant='code'  ：逐句复刻 reference_solution.py（dS_in 直接当下一层的 g_in，
-                          并且权重梯度用 A[t]·σ'[t]）。"""
+        variant='code'  ：逐句复刻 reference_solution.py 的**旧版**（dS_in 直接当下一层的 g_in，
+                          并且权重梯度用 A[t]·σ'[t]）。保留它是为了量出那处偏差有多大。"""
         W1, b1, W2, b2 = self.W1, self.b1, self.W2, self.b2
         T, B = self.T, self.B
         loss, (U1, S1, U2, logits, p) = self.forward(W1, b1, W2, b2)
@@ -215,7 +219,7 @@ class TwoLayer:
                     out[t] = a @ W
                     a_next = a
             else:
-                g = np.zeros((B, n_out))          # ← reference_solution.py 原样
+                g = np.zeros((B, n_out))          # ← 旧版参考解原样（已修）
                 for t in reversed(range(T)):
                     g_t = g + g_in[t]
                     dS = g_t * sd[t]
@@ -232,10 +236,10 @@ class TwoLayer:
 
 
 def check_two_layer():
-    print("[3] 两层端到端：reference_solution.py 的 backward 和真值差多少？")
+    print("[3] 两层端到端：旧版 backward 写法和真值差多少？（现状 = 严格式）")
     net = TwoLayer(T=6, B=4, n0=8, n1=6, n2=4, seed=3)
     true = net.fd_grad()
-    print(f"   {'参数':<6} {'|真值|max':>12} {'严格式误差':>14} {'现状写法误差':>14}")
+    print(f"   {'参数':<6} {'|真值|max':>12} {'严格式误差':>14} {'旧版误差':>14}")
     for k, name in enumerate(("W1", "b1", "W2", "b2")):
         gs, _ = net.bptt("strict")
         gc, _ = net.bptt("code")
@@ -243,7 +247,7 @@ def check_two_layer():
         e_s = np.abs(gs[k] - true[k]).max() / sc
         e_c = np.abs(gc[k] - true[k]).max() / sc
         print(f"   {name:<6} {sc:>12.6f} {e_s:>14.2e} {e_c:>14.2e}")
-    print("\n   -> 严格式全部是机器精度；现状写法从第一层（W1）就开始偏，"
+    print("\n   -> 严格式全部是机器精度；旧版写法从第一层（W1）就开始偏，"
           "两层误差还会继续放大\n")
 
 
