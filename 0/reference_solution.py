@@ -102,8 +102,10 @@ class LIFLayer:
 
     def backward(self, g_in, cache):
         """
-        g_in: dL/dU[t]，形状 (T, B, n_out)。
+        g_in: 入口梯度，形状 (T, B, n_out)。
               **入口一律是 ∂L/∂U**——如果上一层给的是 ∂L/∂S，调用方要自己乘 σ'。见 loss_and_grad。
+              注意 g_in[t] 只是 ∂L/∂U[t] 里"出口送来的那一份"，
+              "沿时间传回来的那一份"由下面的循环补上，两者相加才是 ∂L/∂U[t]。
         返回 dL/dS_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)；
         下一层要用它，得先乘它自己的 σ' 才是它要的 ∂L/∂U。
 
