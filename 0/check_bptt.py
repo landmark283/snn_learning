@@ -114,7 +114,7 @@ class OneLayer:
                 # 只把 σ' 的下标写成 t+1（因子用对的 A[t]）
                 A[t] = self.g_in[t] + A[t + 1] * (BETA - U_TH * sd[t + 1])
             elif variant == "doc":
-                # 旧文档 §4.2.2 ④ 原来写的：(2b) + dS[t+1]·(-U_th)·σ'(U[t]-U_th)
+                # 旧文档原来写的：(2b) + dS[t+1]·(-U_th)·σ'(U[t]-U_th)
                 A[t] = self.g_in[t] + A[t + 1] * BETA + dS[t + 1] * (-U_TH) * sd[t]
                 dS[t] = A[t] * sd[t]
             elif variant == "code":
