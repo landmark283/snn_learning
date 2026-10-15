@@ -140,7 +140,7 @@ def check_one_layer():
         print(f"   {'写法':<30} {'dW 相对误差':>12}")
         for variant, label in (("strict", "严格式：因子 A[t]，σ' 用 t"),
                                ("offbyone", "因子 A[t]，σ' 下标写成 t+1"),
-                               ("doc", "旧文档 ④ 的原式 + 因子 A[t]·σ'[t]"),
+                               ("doc", "旧文档的原式 + 因子 A[t]·σ'[t]"),
                                ("code", "旧版参考解：因子 A[t]·σ'[t]（已修）")):
             err = np.abs(net.bptt(variant) - trueW).max() / scale
             print(f"   {label:<30} {err:>12.2e}")
