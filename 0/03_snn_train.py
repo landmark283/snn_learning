@@ -23,19 +23,18 @@
             U[t] = beta * U[t-1] + I[t] - S[t-1] * U_th
             S[t] = (U[t] >= U_th)
 
-    反向（记 A[t] = dL/dU[t]）：
+    反向（记 A[t] = ∂L/∂U[t]：全导 = 出口那一份 + 沿时间传回来的那一份）：
             A[t]     = g_in[t] + A[t+1] * ( beta - U_th * surrogate'(U[t] - U_th) )
             dW      += A[t].T @ S_in[t]
             db      += A[t].sum(0)
-            dS_in[t] = A[t] @ W                        ← 这是 dL/dS_in，不是 dL/dU
+            dS_in[t] = A[t] @ W                        ← 这是脉冲侧的 ∂L/∂S_in，不是 ∂L/∂U
 
-    参数梯度要的因子是 A[t] = dL/dU[t] 本身，**不是** A[t]*surrogate'——
-    后者是 dL/dS 的量级，会让梯度差一个数量级（check_bptt.py 有实测）。
+    参数梯度要的因子是 A[t] = ∂L/∂U[t] 本身，**不是** A[t]*surrogate'——
+    后者是 ∂L/∂S 的量级，会让梯度差一个数量级（check_bptt.py 有实测）。
 
-    每一层的入口 g_in[t] 必须是**偏导 ∂L/∂U[t]**，也就是 A[t] = dL/dU[t] 里
-    "出口直接送来的那一份"。输出层由读出头给出（(∂L/∂logits)*mask[t]/T，
-    逐拍不同——**不是** 1/T）；隐藏层拿到的是上一层吐出的 dL/dS1[t]，
-    **要先乘 surrogate'(U1-U_th)** 才是入口。
+    每一层的入口 g_in[t] 是 A[t] = ∂L/∂U[t] 里"出口直接送来的那一份"：
+    输出层由读出头给出（(∂L/∂logits)*mask[t]/T，逐拍不同）；隐藏层拿到的是
+    上一层吐出的 ∂L/∂S1[t]，**要先乘 surrogate'(U1-U_th)** 才是入口。
 
     关键：LIF 是有状态的，反向必须一路把 A 沿时间轴传回去，这就是"时序反向传播 (BPTT)"。
     (beta - U_th*surrogate') 里的第二项就是"重置"的贡献，最容易漏。
@@ -121,18 +120,18 @@ class LIFLayer:
 
     def backward(self, g_in: np.ndarray, cache) -> np.ndarray:
         """
-        g_in: 入口梯度，形状 (T, B, n_out)。**入口一律是偏导 ∂L/∂U[t]**——
-              它只承载"出口（读出 / 上一层）直接送来的那一份"；
-              "沿时间传回来的那一份"由下面的循环补上，
-              两者相加才是全导 A[t] = dL/dU[t]。
+        g_in: 入口梯度，形状 (T, B, n_out)。
+              **入口 = A[t] = ∂L/∂U[t] 里"出口（读出 / 上一层）直接送来的那一份"**
+              （不是整个 A[t]）；"沿时间传回来的那一份"由下面的循环补上，
+              两者相加才是 A[t]。
               上一层吐出来的是 ∂L/∂S，调用方要先乘 σ' 才是这里要的东西。
-        返回: dL/dS_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)。
+        返回: ∂L/∂S_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)。
               下一层要用它，同样得先乘它自己的 σ'。
 
         严格式（`check_bptt.py` 用中心差分验证过，机器精度）：
             A[t] = g_in[t] + A[t+1] * (beta - U_th * surrogate'(U[t] - U_th))
             gW += A[t].T @ s_in[t]        gb += A[t].sum(0)
-        权重梯度的因子是 A[t] = dL/dU[t]，**不是** A[t]*σ'。
+        权重梯度的因子是 A[t] = ∂L/∂U[t]，**不是** A[t]*σ'。
         """
         s_in, u_out = cache
         T, B, _ = g_in.shape
@@ -141,7 +140,7 @@ class LIFLayer:
         self.gb[...] = 0.0
         a_next = np.zeros((B, self.n_out), dtype=np.float32)  # A[t+1]，从 t=T-1 往 t=0 传
         for t in reversed(range(T)):
-            # TODO 4: 本拍的 A[t] = dL/dU[t]（全导）。两路相加：
+            # TODO 4: 本拍的 A[t] = ∂L/∂U[t]（全导）。两路相加：
             #         ① 外面进来的 g_in[t]
             #         ② A[t+1]（就是 a_next）乘上系数 (β − U_th·σ'(U[t] - U_th))
             #         系数用**本拍**的 U[t]（它代表 ∂U[t+1]/∂U[t]），写成 U[t+1] 就错了一拍

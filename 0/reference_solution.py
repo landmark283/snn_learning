@@ -103,16 +103,16 @@ class LIFLayer:
     def backward(self, g_in, cache):
         """
         g_in: 入口梯度，形状 (T, B, n_out)。
-              **入口一律是偏导 ∂L/∂U[t]**——即 A[t] = dL/dU[t] 里"出口直接送来的那一份"；
+              **入口 = A[t] = ∂L/∂U[t] 里"出口直接送来的那一份"**（不是整个 A[t]）；
               如果上一层给的是 ∂L/∂S，调用方要自己乘 σ'。见 loss_and_grad。
-              "沿时间传回来的那一份"由下面的循环补上，两者相加才是全导 A[t] = dL/dU[t]。
-        返回 dL/dS_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)；
+              "沿时间传回来的那一份"由下面的循环补上，两者相加才是 A[t]。
+        返回 ∂L/∂S_in (T, B, n_in)，即 ∂L/∂(本层输入的脉冲)；
         下一层要用它，得先乘它自己的 σ' 才是它要的 ∂L/∂U。
 
         严格式（`check_bptt.py` 用中心差分验证过，机器精度）：
             A[t] = g_in[t] + A[t+1] · ( β − U_th · σ'(U[t] − U_th) )
             gW  += A[t].T @ S_in[t]      gb += A[t].sum(0)
-        注意权重梯度用的是 A[t] = dL/dU[t]，**不是** A[t]·σ'(U[t]-U_th)——
+        注意权重梯度用的是 A[t] = ∂L/∂U[t]，**不是** A[t]·σ'(U[t]-U_th)——
         后者是 ∂L/∂S 的量级，会让梯度差一个数量级。
         """
         s_in, u_out = cache
@@ -182,11 +182,11 @@ class SNN2:
         dl_dlatent = np.broadcast_to(dl_dlogits[None] / T, latents.shape).copy()
         dl_du2 = dl_dlatent * mask
 
-        # 输出层的入口：读出头直接给出偏导 ∂L/∂U2[t]
-        #   = (∂L/∂logits) * mask[t] / T，就是 A[t] = dL/dU2[t] 里"出口送来的那一份"
+        # 输出层的入口：读出头直接给出 A[t] = ∂L/∂U2[t] 里"出口送来的那一份"
+        #   = (∂L/∂logits) * mask[t] / T（沿时间传回来的那份在 backward 的循环里补）
         dl_ds1 = self.l2.backward(dl_du2, c2)
-        # 隐藏层的入口必须是 ∂L/∂U1[t]，而 l2 吐出来的是 ∂L/∂S1[t]（这才是它消费的东西）。
-        # 两者的关系就是 S1 = σ(U1-U_th)：∂L/∂U1 = ∂L/∂S1 · σ'(U1-U_th)。
+        # 隐藏层的入口是 A[t] = ∂L/∂U1[t] 里出口那一份，而 l2 吐出来的是 ∂L/∂S1[t]（脉冲侧）。
+        # 两者的关系就是 S1 = σ(U1-U_th)：出口项 = ∂L/∂S1 · σ'(U1-U_th)。
         # 这一步漏掉的话，隐藏层会把 σ' 当成 1，梯度偏离一个数量级。
         s0_in, u1_out = c1
         dl_du1 = dl_ds1 * surrogate_deriv(u1_out - U_TH)

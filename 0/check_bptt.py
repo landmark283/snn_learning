@@ -195,7 +195,7 @@ class TwoLayer:
         return grads
 
     def bptt(self, variant):
-        """variant='strict'：g_in 统一是 dL/dU[t]；上一层传下来的 dL/dS 要乘 σ' 才是 dL/dU。
+        """variant='strict'：g_in 是 A[t] = ∂L/∂U[t] 里出口送来的那一份；上一层下来的 ∂L/∂S 要乘 σ' 才是入口。
         variant='code'  ：逐句复刻 reference_solution.py 的**旧版**（dS_in 直接当下一层的 g_in，
                           并且权重梯度用 A[t]·σ'[t]）。保留它是为了量出那处偏差有多大。"""
         W1, b1, W2, b2 = self.W1, self.b1, self.W2, self.b2
@@ -206,7 +206,7 @@ class TwoLayer:
         dl_dU2 = np.broadcast_to(dl_dlogits[None] / T, U2.shape).copy()
 
         def loop(g_in, sd, s_in, W):
-            """返回 (dW, db, dL/dS_in)"""
+            """返回 (dW, db, ∂L/∂S_in)"""
             n_out = W.shape[0]
             out = np.zeros((T, B, W.shape[1]))
             gW = np.zeros_like(W)
@@ -229,7 +229,7 @@ class TwoLayer:
             return gW, gb, out
 
         gW2, gb2, dS1 = loop(dl_dU2, sd2, S1, W2)
-        # 关键差别：交给下一层的入口是 dL/dU1 = (dL/dS1)·σ'₁ ，还是直接把 dL/dS1 当入口
+        # 关键差别：交给下一层的入口是 A[t]=∂L/∂U1 里出口那份（= (∂L/∂S1)·σ'₁），还是直接把 ∂L/∂S1 当入口
         g1_in = dS1 * sd1 if variant == "strict" else dS1
         gW1, gb1, _ = loop(g1_in, sd1, self.s0, W1)
         return [gW1, gb1, gW2, gb2], loss
@@ -297,7 +297,7 @@ def main():
     check_one_layer()
     check_two_layer()
     ok &= check_reference()
-    print("[OK] 全部通过：§3.3 替代函数自洽；§4.2 的递推用全导 dL/dU[t]、入口用偏导 ∂L/∂U[t]，"
+    print("[OK] 全部通过：§3.3 替代函数自洽；§4.2 的 A[t] = ∂L/∂U[t] 递推、入口 = 出口那一份，"
           "且参考解已对齐。" if ok else "[!!] 有检查未通过")
 
 
